@@ -6,6 +6,11 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 
+subject_id = 6
+action_id = 16
+subaction_id = 2
+frame_id = 1590
+
 # joint set
 joint_num = 17
 
@@ -76,7 +81,9 @@ def draw_skeleton(array, plt_show=True, save_path=None):
 
 
 def print_item(subject_id, act_id, subact_id, frame_id):
-    json_path = f"/media/tunyuan/Backup/Human36M/annotations/Human36M_subject{subject_id}_joint_3d.json"
+    # dataset: https://github.com/mks0601/3DMPPE_POSENET_RELEASE
+    # https://drive.google.com/drive/folders/1r0B9I3XxIIW_jsXjYinDpL6NFcxTZart?usp=sharing
+    json_path = f"/media/tunyuan/Backup/Human36M/joints/Human36M_subject{subject_id}_joint_3d.json"
 
     # Load the JSON data
     with open(json_path, 'r') as f:
@@ -92,8 +99,4 @@ def print_item(subject_id, act_id, subact_id, frame_id):
     return
 
 if __name__ == '__main__':
-    subject_id = 9
-    action_id = 2
-    subaction_id = 1
-    frame_id = 1
     print_item(subject_id, action_id, subaction_id, frame_id)
