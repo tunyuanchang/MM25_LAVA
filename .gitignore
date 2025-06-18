@@ -1,0 +1,13 @@
+# pycache
+__pycache__/
+model/__pycache__/
+*.py[cod]
+
+# dataset
+Human36M/
+
+*.pth
+*.png
+*.jpeg
+
+result/

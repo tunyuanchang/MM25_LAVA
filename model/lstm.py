@@ -1,6 +1,6 @@
 # ==== Model ====
 # CLIP
-# -> TCN
+# -> LSTM
 # -> LLM
 # -> MLP
 # ===============
@@ -27,40 +27,30 @@ class VisionEmbedder(nn.Module):
         x = x.view(B, T, -1)          # (B, T, D)
         return x
 
-class TCNBlock(nn.Module):
-    def __init__(self, input_dim, output_dim, kernel_size, dilation):
+class LSTMBlock(nn.Module):
+    def __init__(self, input_size, hidden_size):
         super().__init__()
-        padding = (kernel_size - 1) * dilation // 2
-        self.conv = nn.Conv1d(input_dim, output_dim, kernel_size, padding=padding, dilation=dilation)
-        self.norm = nn.LayerNorm(output_dim)
-        self.relu = nn.ReLU(inplace=True)
+        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
 
-    def forward(self, x):  # x: [B, D, T]
-        x = self.conv(x)               # [B, H, T]
-        x = x.permute(0, 2, 1)         # [B, T, H]
-        x = self.norm(x)               # LayerNorm over feature dim
-        x = self.relu(x)
-        x = x.permute(0, 2, 1)         # Back to [B, H, T]
-        return x
+    def forward(self, x):
+        out, _ = self.lstm(x)           # out: [B, T, hidden_size]
+        return out                      # return full sequence
 
-# Temporal Embedder (TCN), Shape [B, T, D] -> [B, T * D]
-class TCN(nn.Module):
+# Temporal Embedder (LSTM), Shape [B, T, D] -> [B, T * D]
+class LSTM(nn.Module):
     def __init__(self, input_dim, hidden_dim=512, T=8):
         super().__init__()
         self.T = T
         self.output_dim = input_dim
-
-        self.tcn = nn.Sequential(
-            TCNBlock(input_dim, hidden_dim, kernel_size=3, dilation=1),
-            TCNBlock(hidden_dim, hidden_dim, kernel_size=3, dilation=2),
-            nn.Conv1d(hidden_dim, self.output_dim, kernel_size=1)  # final projection
+        self.lstm = nn.Sequential(
+            LSTMBlock(input_dim, hidden_dim),
+            nn.ReLU(),
+            LSTMBlock(hidden_dim, self.output_dim)
         )
 
     def forward(self, x):  # x: [B, T, D]
-        x = x.permute(0, 2, 1)                # [B, D, T]
-        out = self.tcn(x)                     # [B, output_dim, T]
-        out = out.permute(0, 2, 1)            # [B, T, output_dim]
-        return out.reshape(out.size(0), -1)   # [B, T * output_dim]
+        out = self.lstm(x)              # [B, T, output_dim]
+        return out.reshape(x.size(0), -1)  # [B, T * output_dim]
 
 # GPT-2, Shape [B, T * D] -> [B, F]
 class FoundationModel(nn.Module):
@@ -103,7 +93,7 @@ class PoseEstimator(nn.Module):
         self.visionembed = VisionEmbedder(device=device)
         self.D = self.visionembed.output_dim
 
-        self.temporal = TCN(input_dim=self.D, T=self.T)
+        self.temporal = LSTM(input_dim=self.D, T=self.T)
         self.llm = FoundationModel(input_dim=self.T * self.D, T=self.T)
         self.generator = Generator(input_dim=768, num_joints=num_joints, T=self.T)
 

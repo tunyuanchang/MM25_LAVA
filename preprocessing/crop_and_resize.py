@@ -7,7 +7,8 @@ import json
 import argparse
 from PIL import Image
 
-ROOT_DIR = f"/media/tunyuan/Backup/Human36M/"
+current_dir = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.join(os.path.dirname(current_dir), "Human36M")
 DATA_DIR = "annotations/"
 IMAGE_DIR = "images/"
 

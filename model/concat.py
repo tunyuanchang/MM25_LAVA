@@ -10,8 +10,8 @@ import torch.nn as nn
 import clip
 from transformers import GPT2Model
 
-# CLIP Backbone (Frozen), Shape [B, T, C, H, W] -> [B, T, D]
-class CLIP(nn.Module):
+# CLIP (Frozen), Shape [B, T, C, H, W] -> [B, T, D]
+class VisionEmbedder(nn.Module):
     def __init__(self, model_name='ViT-B/32', device='cuda'):
         super().__init__()
         self.clip_model, preprocess = clip.load(model_name, device=device)
@@ -22,15 +22,15 @@ class CLIP(nn.Module):
     def forward(self, x):  # x: (B, T, C, H, W)
         self.clip_model.eval()
         B, T, C, H, W = x.size()
-        x = x.view(B * T, C, H, W)
-        x = self.visual(x)  # (B*T, D)
-        x = x.view(B, T, -1)  # (B, T, D)
+        x = x.view(B * T, C, H, W)    # (B*T, C, H, W)
+        x = self.visual(x)            # (B*T, D)
+        x = x.view(B, T, -1)          # (B, T, D)
         return x
 
 
 # Concatenation, Shape [B, T, D] -> [B, T * D]
-class Concat(nn.Module):
-    def __init__(self, input_dim, T=8):
+class Concatenation(nn.Module):
+    def __init__(self, input_dim, T=30):
         super().__init__()
         self.T = T
 
@@ -38,22 +38,20 @@ class Concat(nn.Module):
         return x.reshape(x.size(0), -1)    # [B, T * D]
 
 
-# GPT-2 Foundation Model, Shape [B, T * D] -> [B, F]
-class GPT2PoseWrapper(nn.Module):
-    def __init__(self, input_dim, F=768, T=8):
+# GPT-2, Shape [B, T * D] -> [B, F]
+class FoundationModel(nn.Module):
+    def __init__(self, input_dim, F=768, T=30):
         super().__init__()
         self.T = T
-
-        self.project_in = nn.Linear(input_dim, F)
-
+        self.project = nn.Linear(input_dim, F)
         self.gpt2 = GPT2Model.from_pretrained("openai-community/gpt2")
 
         for param in self.gpt2.parameters():
             param.requires_grad = False  # freeze GPT-2
 
     def forward(self, x):  # x: (B, T * D)
-        x = self.project_in(x)           # (B, F)
-        x = x.unsqueeze(1)               # (B, 1, F)
+        x = self.project(x)                               # (B, F)
+        x = x.unsqueeze(1)                                # (B, 1, F)
         x = self.gpt2(inputs_embeds=x).last_hidden_state  # (B, 1, F)
         return x.view(x.size(0), -1)
 
@@ -79,16 +77,16 @@ class PoseEstimator(nn.Module):
         self.num_joints = num_joints
         self.T = T
 
-        self.backbone = CLIP(device=device)
-        self.D = self.backbone.output_dim
+        self.visionembed = VisionEmbedder(device=device)
+        self.D = self.visionembed.output_dim
 
-        self.temporal = Concat(input_dim=self.D, T=self.T)
-        self.llm_block = GPT2PoseWrapper(input_dim=self.T * self.D, T=self.T)
-        self.generator = Generator(input_dim=768, num_joints=num_joints, T=T)
+        self.temporal = Concatenation(input_dim=self.D, T=self.T)
+        self.llm = FoundationModel(input_dim=self.T * self.D, T=self.T)
+        self.generator = Generator(input_dim=768, num_joints=num_joints, T=self.T)
 
     def forward(self, x):  # x: (B, T, C, H, W)
-        features = self.backbone(x)             # (B, T, D)
-        flat_pose = self.temporal(features)     # (B, T * D)
-        refined = self.llm_block(flat_pose)     # (B, T, F)
-        output = self.generator(refined)        # (B, T, J, 3)
+        x = self.visionembed(x)       # (B, T, D)
+        x = self.temporal(x)          # (B, T * D)
+        x = self.llm(x)               # (B, T, F)
+        output = self.generator(x)    # (B, T, J, 3)
         return output
