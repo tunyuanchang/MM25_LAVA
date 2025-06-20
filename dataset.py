@@ -50,7 +50,7 @@ class PoseDataset(Dataset):
                     joint_seq.append(joint)             
                     
                 self.samples.append([image_seq, joint_seq])
-        
+       
         self.image_folder = image_folder
         self.transform = transforms.Compose([
             transforms.ToTensor(),

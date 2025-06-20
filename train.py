@@ -1,3 +1,4 @@
+import time
 import torch
 import argparse
 from tqdm import tqdm
@@ -23,28 +24,30 @@ if __name__ == "__main__":
     # args
     parser = argparse.ArgumentParser()
     parser.add_argument("--gpu_index", "--g", type=int, default=0, help="GPU index")
-    parser.add_argument("--model", "--m", type=str, default="TCN", help="Model setting")
+    parser.add_argument("--model", "--m", type=str, default="tcn", help="Model setting")
     parser.add_argument("--window_size", "--w", type=int, default=30, help="Window size of sliding window")
-    parser.add_argument("--batch_size", "--b", type=int, default=4, help="Batch size")
     parser.add_argument("--epoch", "--e", type=int, default=10, help="Number of epoch")
+
     parser.add_argument("--learning_rate", "--lr", type=float, default=1e-3, help="Learning rate")
+    parser.add_argument("--batch_size", "--b", type=int, default=4, help="Batch size")
+    
+    parser.add_argument("--checkpoint", "--c", type=str, default=None, help="Existing checkpoint")
     parser.add_argument("--input", "--i", type=str, default=None, help="Input root dir")
     parser.add_argument("--output", "--o", type=str, default=None, help="Output dir name")
     
     args = parser.parse_args()
-    MODEL_NAME = args.model
+    MODEL_NAME = args.model.lower()
     EPOCH = args.epoch
     WINDOW_SIZE = args.window_size
     LR = args.learning_rate
     BATCH_SIZE = args.batch_size
     INDEX = args.gpu_index
-
+    CHECKPOINT = args.checkpoint
+        
     if args.input != None:
         ROOT_DIR = args.input
     if args.output != None:
-        OUTPUT_DIR = f"{args.output}{MODEL_NAME}"
-    else:
-        OUTPUT_DIR = f"{RESULT_DIR}{MODEL_NAME}"
+        RESULT_DIR = args.output
 
     # device
     if torch.cuda.is_available() and INDEX < torch.cuda.device_count():
@@ -56,55 +59,67 @@ if __name__ == "__main__":
 
     print(device)
 
-    # dataset
-    train_dataset = PoseDataset(ROOT_DIR, 'image_train', 'joint_train', window_size=WINDOW_SIZE, stride=WINDOW_SIZE)
-    valid_dataset = PoseDataset(ROOT_DIR, 'image_test', 'joint_test', window_size=WINDOW_SIZE, stride=WINDOW_SIZE)
-    
-
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=8, shuffle=True, pin_memory=True)
-    valid_loader = DataLoader(valid_dataset, batch_size=1, shuffle=False, pin_memory=True)
-    
-    print(len(train_dataset), len(valid_dataset))
-    print(len(train_loader), len(valid_loader))
-
     # model
-    if MODEL_NAME in ["TCN", "tcn"]:
-        model = TCN(num_joints=NUM_JOINTS-1, device=device).to(device)
-    
-    elif MODEL_NAME in ["GRU", "gru"]:
-        model = GRU(num_joints=NUM_JOINTS-1, device=device).to(device)
+    match MODEL_NAME:
+        case "tcn":
+            model = TCN(num_joints=NUM_JOINTS-1, T=WINDOW_SIZE, device=device).to(device)
+        case "gru":
+            model = GRU(num_joints=NUM_JOINTS-1, T=WINDOW_SIZE, device=device).to(device)
+        case "lstm":
+            model = LSTM(num_joints=NUM_JOINTS-1, T=WINDOW_SIZE, device=device).to(device)
+        case "concat":
+            model = Concat(num_joints=NUM_JOINTS-1, T=WINDOW_SIZE, device=device).to(device)
+        case "single":
+            WINDOW_SIZE = 1
+            model = Concat(num_joints=NUM_JOINTS-1, T=WINDOW_SIZE, device=device).to(device)
+        case _:
+            print("Error model name!")
+            exit(0)
 
-    elif MODEL_NAME in ["LSTM", "lstm"]:
-        model = LSTM(num_joints=NUM_JOINTS-1, device=device).to(device)
-
-    elif MODEL_NAME in ["Concat", "concat"]:
-        model = Concat(num_joints=NUM_JOINTS-1, device=device).to(device)
-
-    else:
-        print("Error model name!")
-        exit(0)
+    print(MODEL_NAME)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
 
+    if CHECKPOINT != None and CHECKPOINT.endswith(".ckpt"):
+        checkpoint = torch.load(f"{RESULT_DIR}{CHECKPOINT}", map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        start_epoch = checkpoint['epoch']
+    else:
+        start_epoch = 0
+
+    # dataset
+    train_dataset = PoseDataset(ROOT_DIR, 'image_train', 'joint_train', window_size=WINDOW_SIZE, stride=WINDOW_SIZE)
+    test_dataset = PoseDataset(ROOT_DIR, 'image_test', 'joint_test', window_size=WINDOW_SIZE, stride=WINDOW_SIZE)
+
+    # dataloader
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=8, shuffle=True, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True)
+    
+    print(len(train_dataset), len(test_dataset))
+    print(len(train_loader), len(test_loader))
+
+
     torch.cuda.empty_cache()
 
-    # train & valid
+    # train & test
 
     train_loss = []
-    valid_loss = []
+    test_loss = []
 
     train_time = []
-    valid_time = []
+    test_time = []
 
-    print('Start Training')
     for epoch in range(EPOCH):
-        pbar = tqdm(train_loader)
-        pbar.set_description(f"Training epoch [{epoch+1}]")
 
+        # training
         model.train()
         total_loss = 0
+        start_time = time.time()  # Start timer
 
-        for (frames, keypoints_3d) in pbar:
+        count = 0
+
+        for (frames, keypoints_3d) in train_loader:
             optimizer.zero_grad()
 
             frames = frames.to(device)           # (B, 30, C, H, W)
@@ -118,19 +133,19 @@ if __name__ == "__main__":
 
             total_loss += loss.item()
 
-            pbar.set_postfix(loss=f"{loss:.4f}")
+        duration = time.time() - start_time
+        avg_loss = total_loss / len(train_loader)
+        print(f"Training, Epoch {start_epoch + epoch + 1}, Loss: {avg_loss:.4f}, Time: {duration:.2f}")
+        train_loss.append(avg_loss)
+        train_time.append(duration)
 
-        print(f"Epoch {epoch + 1} | Training Loss: {total_loss / len(train_loader):.4f}")
-        train_loss.append(total_loss / len(train_loader))
-
-        pbar = tqdm(valid_loader)
-        pbar.set_description(f"Validation epoch [{epoch+1}]")
-
+        # testing
         model.eval()
         total_loss = 0
+        start_time = time.time()  # Start timer
 
         with torch.no_grad():
-            for (frames, keypoints_3d) in pbar:
+            for (frames, keypoints_3d) in test_loader:
                 frames = frames.to(device)           # (B, 30, C, H, W)
                 keypoints_3d = keypoints_3d.to(device)  # (B, 30, J, 3)
 
@@ -138,13 +153,32 @@ if __name__ == "__main__":
                 loss = mpjpe(preds, keypoints_3d[:, :, 1:, :])
 
                 total_loss += loss.item()
-                pbar.set_postfix(loss=f"{loss:.4f}")
+        
+        duration = time.time() - start_time
+        avg_loss = total_loss / len(test_loader)
+        print(f"Testing, Epoch {start_epoch + epoch + 1}, Loss: {avg_loss:.4f}, Time: {duration:.2f}")
+        test_loss.append(avg_loss)
+        test_time.append(duration)
 
-        print(f"Epoch {epoch + 1} | Validation Loss: {total_loss / len(valid_loader):.4f}")
-        valid_loss.append(total_loss / len(valid_loader))
+    # save
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'epoch': start_epoch + EPOCH
+    }, f'{RESULT_DIR}checkpoint_{MODEL_NAME}_{start_epoch + EPOCH}.ckpt')
 
-    torch.save(model.state_dict(), f"{OUTPUT_DIR}_model_{EPOCH}.pth")
+    with open(f"{RESULT_DIR}train_time_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+        for epoch in range(EPOCH):
+            print(f"{start_epoch + epoch + 1},{train_time[epoch]}", file=f)
 
-    with open(f"{OUTPUT_DIR}_loss_{EPOCH}.txt", 'w') as f:
-        print(','.join(map(str, train_loss)), file=f)
-        print(','.join(map(str, valid_loss)), file=f)
+    with open(f"{RESULT_DIR}test_time_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+        for epoch in range(EPOCH):
+            print(f"{start_epoch + epoch + 1},{test_time[epoch]}", file=f)
+
+    with open(f"{RESULT_DIR}train_loss_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+        for epoch in range(EPOCH):
+            print(f"{start_epoch + epoch + 1},{train_loss[epoch]}", file=f)
+
+    with open(f"{RESULT_DIR}test_loss_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+        for epoch in range(EPOCH):
+            print(f"{start_epoch + epoch + 1},{test_loss[epoch]}", file=f)
