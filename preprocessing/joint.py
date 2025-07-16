@@ -4,7 +4,7 @@ import argparse
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.join(os.path.dirname(current_dir), "Human36M")
-data_folder = os.path.join(root_dir, "annotations")
+data_folder = os.path.join(root_dir, "joints")
 
 combined_data = {}
 id_list = []
@@ -12,15 +12,17 @@ id_list = []
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--filename", "--f", type=str, default='train', help="Output filename")
-    parser.add_argument("--train", "--t", type=bool, default=True, help="Train/Test")
+    parser.add_argument("--filename", "--f", type=str, default='joint_all', help="Output filename")
+    parser.add_argument("--train", "--t", type=bool, default=False, help="Train/Test")
 
     args = parser.parse_args()
-    filename = args.dir
+    filename = args.filename
     if args.train:
         id_list = [1,5,6,7,8]
     else: 
         id_list = [9]
+
+    # id_list = [1,5,6,7,8,9]
 
     for subject_id in id_list:
         filepath = os.path.join(data_folder, f"Human36M_subject{subject_id}_joint_3d.json")

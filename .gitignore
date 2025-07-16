@@ -11,3 +11,5 @@ Human36M/
 *.jpeg
 
 result/
+fig/
+visualization/

@@ -27,12 +27,13 @@ class LSTM(nn.Module):
         self.lstm = nn.Sequential(
             LSTMBlock(input_dim, hidden_dim),
             nn.ReLU(),
-            LSTMBlock(hidden_dim, self.output_dim)
+            nn.Linear(hidden_dim, self.output_dim)
         )
 
     def forward(self, x):  # x: [B, T, D]
+        B = x.size(0)
         out = self.lstm(x)              # [B, T, output_dim]
-        return out
+        return out.reshape(B, -1)
 
 # Combined Pose Estimator Model
 class PoseEstimator(nn.Module):
@@ -45,7 +46,7 @@ class PoseEstimator(nn.Module):
         self.D = self.visionembed.output_dim
 
         self.temporal = LSTM(input_dim=self.D, T=self.T)
-        self.llm = FoundationModel(input_dim=self.D, T=self.T)
+        self.llm = FoundationModel(input_dim=self.T*self.D, T=self.T)
         self.generator = Generator(input_dim=768, num_joints=num_joints, T=self.T)
 
     def forward(self, x):  # x: (B, T, C, H, W)

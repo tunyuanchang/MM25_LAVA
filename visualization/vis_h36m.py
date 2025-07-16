@@ -6,10 +6,10 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 
-subject_id = 6
-action_id = 16
-subaction_id = 2
-frame_id = 1590
+subject_id = 1
+action_id = 2
+subaction_id = 1
+frame_id = 10
 
 # joint set
 joint_num = 17
@@ -30,13 +30,14 @@ skeleton = ( (0, 7), (7, 8), (8, 9), (9, 10), # axis
 colors = ['black',
           'blue', 'blue', 'blue',
           'red', 'red', 'red',
-          'black', 'black', 'black', 'black',
+          'purple', 'purple', 'purple', 'purple',
           'orange', 'orange', 'orange',
           'green', 'green', 'green']
 
-def draw_skeleton(array, plt_show=True, save_path=None):
-    fig = plt.figure()
+def draw_skeleton(array, plt_show=True, save_path='vis.eps'):
+    fig = plt.figure(figsize=(6.4, 4.8), constrained_layout=True)
     ax = fig.add_subplot(111, projection='3d')
+    # fig.subplots_adjust(left=0.05, right=4.75,top=6.35,bottom=0)
     ax.grid(False)
 
     ### Plot fakebbox for margin
@@ -54,7 +55,12 @@ def draw_skeleton(array, plt_show=True, save_path=None):
     ###
     
     # Plot joints
-    ax.scatter(array[:, 0], array[:, 1], array[:, 2], c=colors)
+    ax.scatter(array[0, 0], array[0, 1], array[0, 2], c=colors[0], marker='+', s=80, label='Pelvis')
+    ax.scatter(array[1:4, 0], array[1:4, 1], array[1:4, 2], c=colors[1:4], label='Right Leg')
+    ax.scatter(array[4:7, 0], array[4:7, 1], array[4:7, 2], c=colors[4:7], label='Left Leg')
+    ax.scatter(array[7:11, 0], array[7:11, 1], array[7:11, 2], c=colors[7:11], label='Central Joint')
+    ax.scatter(array[11:14, 0], array[11:14, 1], array[11:14, 2], c=colors[11:14], label='Left Arm')
+    ax.scatter(array[14:, 0], array[14:, 1], array[14:, 2], c=colors[14:], label='Right Arm')
     
     # Plot skeleton
     for (start, end) in skeleton:
@@ -68,13 +74,19 @@ def draw_skeleton(array, plt_show=True, save_path=None):
     ax.set_xticklabels([])
     ax.set_yticklabels([])
     ax.set_zticklabels([])
-    
-    ax.set_title('3D Skeleton Plot')
 
     # Show plot
-    if plt_show:
-        plt.show()
+    # if plt_show:
+    #     plt.show()
     
+    # plt.tight_layout()
+    # plt.show()
+    ax.legend(
+        loc='upper left',
+        bbox_to_anchor=(0, 0.75),  # slightly lower than top
+        bbox_transform=ax.transAxes
+    )
+
     if save_path is not None:
         fig.savefig(save_path)
         plt.close()
@@ -83,7 +95,7 @@ def draw_skeleton(array, plt_show=True, save_path=None):
 def print_item(subject_id, act_id, subact_id, frame_id):
     # dataset: https://github.com/mks0601/3DMPPE_POSENET_RELEASE
     # https://drive.google.com/drive/folders/1r0B9I3XxIIW_jsXjYinDpL6NFcxTZart?usp=sharing
-    json_path = f"/media/tunyuan/Backup/Human36M/joints/Human36M_subject{subject_id}_joint_3d.json"
+    json_path = f"../Human36M/joints/Human36M_subject{subject_id}_joint_3d.json"
 
     # Load the JSON data
     with open(json_path, 'r') as f:

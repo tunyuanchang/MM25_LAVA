@@ -67,9 +67,12 @@ class PoseDataset(Dataset):
         image_seq, joints = self.samples[idx]
 
         images = []
+        action_id = 0
 
         for path in image_seq:
             image_path = os.path.join(self.image_folder, path)
+            if len(images) == 0:
+                subject_id, action_id, subaction_id, camera_id, frame_id = parse_image(path)
             image = Image.open(image_path).convert('RGB')
             image = self.transform(image)
             images.append(image)
@@ -77,4 +80,4 @@ class PoseDataset(Dataset):
         images = torch.stack(images)  # Shape: (window_size, C, H, W)
         joints = torch.stack(joints)  # Shape: (window_size, num_joints, 3)
 
-        return images, joints
+        return action_id, images, joints

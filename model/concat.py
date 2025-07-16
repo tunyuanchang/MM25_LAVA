@@ -16,7 +16,8 @@ class Concatenation(nn.Module):
         self.T = T
 
     def forward(self, x):  # x: (B, T, D)
-        return x
+        B = x.size(0)
+        return x.reshape(B, -1)
 
 # Combined Pose Estimator Model
 class PoseEstimator(nn.Module):
@@ -29,7 +30,7 @@ class PoseEstimator(nn.Module):
         self.D = self.visionembed.output_dim
 
         self.temporal = Concatenation(input_dim=self.D, T=self.T)
-        self.llm = FoundationModel(input_dim=self.D, T=self.T)
+        self.llm = FoundationModel(input_dim=self.T*self.D, T=self.T)
         self.generator = Generator(input_dim=768, num_joints=num_joints, T=self.T)
 
     def forward(self, x):  # x: (B, T, C, H, W)

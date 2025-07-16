@@ -11,13 +11,17 @@ from model.utils import VisionEmbedder, FoundationModel, Generator
 
 # Temporal Embedder (GRU), Shape [B, T, D] -> [B, T * D]
 class GRUBlock(nn.Module):
-    def __init__(self, input_size, hidden_size):
+    def __init__(self, input_dim, output_dim, num_layers):
         super().__init__()
-        self.gru = nn.GRU(input_size, hidden_size, batch_first=True)
+        self.gru = nn.GRU(input_dim, output_dim, batch_first=True)
+        self.norm = nn.LayerNorm(output_dim)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        out, _ = self.gru(x)           # out: [B, T, hidden_size]
-        return out                      # return full sequence
+        out, _ = self.gru(x)           # out: [B, T, hidden_dim]
+        out = self.norm(out)
+        out = self.relu(out)
+        return out                     # return full sequence
 
 class GRU(nn.Module):
     def __init__(self, input_dim, hidden_dim=512, T=8):
@@ -25,14 +29,15 @@ class GRU(nn.Module):
         self.T = T
         self.output_dim = input_dim
         self.gru = nn.Sequential(
-            GRUBlock(input_dim, hidden_dim),
-            nn.ReLU(),
-            GRUBlock(hidden_dim, self.output_dim)
+            GRUBlock(input_dim, hidden_dim, 2),
+            GRUBlock(hidden_dim, hidden_dim, 2),
+            nn.Linear(hidden_dim, self.output_dim)
         )
 
     def forward(self, x):  # x: [B, T, D]
+        B = x.size(0)
         out = self.gru(x)              # [B, T, output_dim]
-        return out
+        return out.reshape(B, -1)
 
 # Combined Pose Estimator Model
 class PoseEstimator(nn.Module):
@@ -45,7 +50,7 @@ class PoseEstimator(nn.Module):
         self.D = self.visionembed.output_dim
 
         self.temporal = GRU(input_dim=self.D, T=self.T)
-        self.llm = FoundationModel(input_dim=self.D, T=self.T)
+        self.llm = FoundationModel(input_dim=self.T*self.D, T=self.T)
         self.generator = Generator(input_dim=768, num_joints=num_joints, T=self.T)
 
     def forward(self, x):  # x: (B, T, C, H, W)

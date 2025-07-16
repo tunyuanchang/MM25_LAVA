@@ -1,3 +1,9 @@
+# ==== class ====
+# VisionEmbedder: CLIP
+# FoundationModel: GPT-2
+# Generator: MLP
+# ===============
+
 import torch
 import torch.nn as nn
 import clip
@@ -34,28 +40,27 @@ class FoundationModel(nn.Module):
 
     def forward(self, x):  # x: (B, T * D)
         B = x.size(0)
-
-        x = x.reshape(B * self.T, -1)           # (B * T, D)
-        x = self.project(x)                     # (B * T, F)
-        x = x.reshape(B, self.T, -1)            # (B, T, F)
-        
-        x = self.gpt2(inputs_embeds=x).last_hidden_state  # (B, T, F)
-        
-        return x
+        x = self.project(x)                     # (B, F)
+        x = x.unsqueeze(1)                      # (B, 1, F)
+        x = self.gpt2(inputs_embeds=x).last_hidden_state  # (B, 1, F)
+        return x.reshape(B, -1)
 
 
-# Generator (Neural Network), Shape [B, T, F] -> [B, T, J, 3]
+# Generator (Neural Network), Shape [B, F] -> [B, T, J, 3]
 class Generator(nn.Module):
-    def __init__(self, input_dim, num_joints, T):
+    def __init__(self, input_dim, hidden_dim=512, num_joints=16, T=30):
         super().__init__()
-        self.linear = nn.Linear(input_dim, num_joints*3)
+        self.linear = nn.Linear(input_dim, T*num_joints*3)
+        self.mlp = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(hidden_dim, T*num_joints*3)
+        )
         self.T = T
         self.num_joints = num_joints
 
     def forward(self, x):  # x: (B, T, F)
         B = x.size(0)
-
-        x = x.reshape(B * self.T, -1)              # (B * T, F)
-        x = self.linear(x)                      # (B * T, J * 3)
-        
+        x = self.mlp(x)                                # (B , T * J * 3)
         return x.reshape(B, -1, self.num_joints, 3)    # (B, T, J, 3)

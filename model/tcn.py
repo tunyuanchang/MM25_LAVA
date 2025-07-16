@@ -15,15 +15,15 @@ class TCNBlock(nn.Module):
         super().__init__()
         padding = (kernel_size - 1) * dilation // 2
         self.conv = nn.Conv1d(input_dim, output_dim, kernel_size, padding=padding, dilation=dilation)
-        self.norm = nn.LayerNorm(output_dim)
+        self.norm = nn.BatchNorm1d(output_dim)
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):  # x: [B, D, T]
         x = self.conv(x)               # [B, H, T]
-        x = x.permute(0, 2, 1)         # [B, T, H]
+        # x = x.permute(0, 2, 1)         # [B, T, H]
         x = self.norm(x)               # LayerNorm over feature dim
         x = self.relu(x)
-        x = x.permute(0, 2, 1)         # Back to [B, H, T]
+        # x = x.permute(0, 2, 1)         # Back to [B, H, T]
         return x
 
 class TCN(nn.Module):
@@ -39,10 +39,11 @@ class TCN(nn.Module):
         )
 
     def forward(self, x):  # x: [B, T, D]
+        B = x.size(0)
         x = x.permute(0, 2, 1)                # [B, D, T]
         out = self.tcn(x)                     # [B, output_dim, T]
         out = out.permute(0, 2, 1)            # [B, T, output_dim]
-        return out
+        return out.reshape(B, -1)
 
 # Combined Pose Estimator Model
 class PoseEstimator(nn.Module):
@@ -55,7 +56,7 @@ class PoseEstimator(nn.Module):
         self.D = self.visionembed.output_dim
 
         self.temporal = TCN(input_dim=self.D, T=self.T)
-        self.llm = FoundationModel(input_dim=self.D, T=self.T)
+        self.llm = FoundationModel(input_dim=self.T*self.D, T=self.T)
         self.generator = Generator(input_dim=768, num_joints=num_joints, T=self.T)
 
     def forward(self, x):  # x: (B, T, C, H, W)

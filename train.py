@@ -29,7 +29,7 @@ if __name__ == "__main__":
     parser.add_argument("--epoch", "--e", type=int, default=10, help="Number of epoch")
 
     parser.add_argument("--learning_rate", "--lr", type=float, default=1e-3, help="Learning rate")
-    parser.add_argument("--batch_size", "--b", type=int, default=4, help="Batch size")
+    parser.add_argument("--batch_size", "--b", type=int, default=16, help="Batch size")
     
     parser.add_argument("--checkpoint", "--c", type=str, default=None, help="Existing checkpoint")
     parser.add_argument("--input", "--i", type=str, default=None, help="Input root dir")
@@ -94,7 +94,7 @@ if __name__ == "__main__":
 
     # dataloader
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=8, shuffle=True, pin_memory=True)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True)
+    test_loader = DataLoader(test_dataset, batch_size=1, num_workers=8, shuffle=False, pin_memory=True)
     
     print(len(train_dataset), len(test_dataset))
     print(len(train_loader), len(test_loader))
@@ -160,25 +160,26 @@ if __name__ == "__main__":
         test_loss.append(avg_loss)
         test_time.append(duration)
 
+        
     # save
     torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
         'epoch': start_epoch + EPOCH
-    }, f'{RESULT_DIR}checkpoint_{MODEL_NAME}_{start_epoch + EPOCH}.ckpt')
+    }, f'{RESULT_DIR}checkpoint_{MODEL_NAME}_{start_epoch + EPOCH}_{WINDOW_SIZE}.ckpt')
 
-    with open(f"{RESULT_DIR}train_time_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+    with open(f"{RESULT_DIR}train_time_{MODEL_NAME}_{start_epoch + EPOCH}_{WINDOW_SIZE}.txt", 'w') as f:
         for epoch in range(EPOCH):
             print(f"{start_epoch + epoch + 1},{train_time[epoch]}", file=f)
 
-    with open(f"{RESULT_DIR}test_time_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+    with open(f"{RESULT_DIR}test_time_{MODEL_NAME}_{start_epoch + EPOCH}_{WINDOW_SIZE}.txt", 'w') as f:
         for epoch in range(EPOCH):
             print(f"{start_epoch + epoch + 1},{test_time[epoch]}", file=f)
 
-    with open(f"{RESULT_DIR}train_loss_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+    with open(f"{RESULT_DIR}train_loss_{MODEL_NAME}_{start_epoch + EPOCH}_{WINDOW_SIZE}.txt", 'w') as f:
         for epoch in range(EPOCH):
             print(f"{start_epoch + epoch + 1},{train_loss[epoch]}", file=f)
 
-    with open(f"{RESULT_DIR}test_loss_{MODEL_NAME}_{start_epoch + EPOCH}.txt", 'w') as f:
+    with open(f"{RESULT_DIR}test_loss_{MODEL_NAME}_{start_epoch + EPOCH}_{WINDOW_SIZE}.txt", 'w') as f:
         for epoch in range(EPOCH):
             print(f"{start_epoch + epoch + 1},{test_loss[epoch]}", file=f)
