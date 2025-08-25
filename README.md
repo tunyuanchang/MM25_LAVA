@@ -1,5 +1,5 @@
 # Harvesting Temporal Correlation in Large Vision-Language Models: Using Pose Estimation as a Case Study
-###### submitted to Proceedings of ACM International Workshop on Large Vision–Language Model Learning and Applications (LAVA'25)
+###### submitted to Proc. of ACM International Workshop on Large Vision–Language Model Learning and Applications (LAVA'25)
 ###### cr: tunyuanchang
 
 [https://lava-workshop.github.io/workshop](https://lava-workshop.github.io/workshop)
